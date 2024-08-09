@@ -1,30 +1,57 @@
-#!/bin/bash
-#reconnect to campus net
+# PowerShell脚本，用于重新连接到校园网
 
-userId='here is your user id'
-password='here is your password'
+$userId = "这里填写你的用户名"
+$password = "这里填写你的密码"
 
-echo 'start check connection state'
-content=$(curl http://123.123.123.123 -s -m 10 \
-              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0")
-code=$?
-if [ $code -eq 28 ]; then
-	echo "maybe connection no problem"
-	exit 0
-elif [ $code -ne 0 ]; then
-	echo "wrong exitcode: ${code}"
-	echo "fetch querystring failed"
-	echo "content: ${content}"
-	exit 1
-fi
+Write-Host "开始检查连接状态"
 
-echo "content is ${content}"
-queryString=$(echo $content | grep -o "http[^']*" | awk -F "?" '{print $2}')
-echo "queryString is ${queryString}"
+# 检查网络状态的服务器IP地址
+$checkIp = "123.123.123.123"
 
-content=$(curl http://10.0.22.3/eportal/InterFace.do?method=login -vv -X POST \
-              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0" \
-              -d "userId=${userId}&password=${password}&passwordEncrypt=false" \
-              --data-urlencode "queryString=${queryString}")
-echo "result: $?"
-echo $content
+# 登录接口的服务器IP地址，这里设置为待填状态
+$loginIpPlaceholder = "FILL_WITH_LOGIN_IP"
+
+# 使用Invoke-WebRequest检查网络连接状态
+try {
+    $content = Invoke-WebRequest -Uri "http://$checkIp" -Method Get -TimeoutSec 10 -UseBasicParsing
+    $content
+} catch {
+    $statusCode = $_.Exception.Response.StatusCode.value__
+    if ($statusCode -eq 408) {
+        Write-Host "可能是连接超时，但网络可能仍然正常"
+        exit 0
+    } else {
+        Write-Host "错误的HTTP状态码: $statusCode"
+        Write-Host "获取网络状态失败"
+        Write-Host "内容: $content"
+        exit 1
+    }
+}
+
+# 解析查询字符串
+$queryString = $content.Content -match 'http[^"]*'
+if ($matches[0] -ne $null) {
+    $queryString = $matches[0] | Select-String -Pattern '\?.*' -AllMatches | ForEach-Object { $_.Matches.Value.Substring(1) }
+    Write-Host "查询字符串是: $queryString"
+} else {
+    Write-Host "未能从响应中提取查询字符串"
+    exit 1
+}
+
+# 使用Invoke-WebRequest通过POST请求登录校园网络
+$body = @{
+    "userId" = $userId
+    "password" = $password
+    "passwordEncrypt" = "false"
+    "queryString" = $queryString
+}
+
+$loginUrl = "http://$loginIpPlaceholder/eportal/InterFace.do?method=login"
+try {
+    $content = Invoke-WebRequest -Uri $loginUrl -Method Post -Body $body -ContentType "application/x-www-form-urlencoded" -UseBasicParsing
+    Write-Host "登录结果状态码:" $content.StatusCode
+    Write-Host "登录内容:`n$($content.Content)"
+} catch {
+    Write-Host "登录失败: $_"
+    exit 1
+}
