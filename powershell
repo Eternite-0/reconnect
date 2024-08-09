@@ -1,0 +1,30 @@
+#!/bin/bash
+#reconnect to campus net
+
+userId='here is your user id'
+password='here is your password'
+
+echo 'start check connection state'
+content=$(curl http://123.123.123.123 -s -m 10 \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0")
+code=$?
+if [ $code -eq 28 ]; then
+	echo "maybe connection no problem"
+	exit 0
+elif [ $code -ne 0 ]; then
+	echo "wrong exitcode: ${code}"
+	echo "fetch querystring failed"
+	echo "content: ${content}"
+	exit 1
+fi
+
+echo "content is ${content}"
+queryString=$(echo $content | grep -o "http[^']*" | awk -F "?" '{print $2}')
+echo "queryString is ${queryString}"
+
+content=$(curl http://10.0.22.3/eportal/InterFace.do?method=login -vv -X POST \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0" \
+              -d "userId=${userId}&password=${password}&passwordEncrypt=false" \
+              --data-urlencode "queryString=${queryString}")
+echo "result: $?"
+echo $content
